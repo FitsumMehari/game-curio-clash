@@ -19,8 +19,8 @@ Curio Clash leans on auction-game tension from titles like *For Sale* (scarce mo
 
 ### Modes shipping now
 
-1. **Bot Market** — guest nickname, 3 AI dealers (Collector, Shark, Skeptic / Accountant / Bluffer roster)
-2. **Private Table** — shareable `?room=CODE` seed; empty seats filled with bots (live sockets planned)
+1. **Solo vs Computer** — guest nickname, 1–5 AI dealers drawn from **200 playbooks** (aggression, bluffs, snipes, late-game hoarding, claim biases)
+2. **Private Table** — shareable `?room=CODE` seed; empty seats filled with dealers
 3. **Daily Appraiser** — one UTC seed puzzle with shareable score
 
 ### Modes designed, not built yet
