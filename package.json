@@ -8,12 +8,20 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "check": "tsc --noEmit && vitest run && vite build"
+    "check": "tsc --noEmit && vitest run && vite build",
+    "build:web": "tsc && vite build",
+    "build:android": "VITE_BASE=./ npm run build && npx cap sync android",
+    "cap:sync": "npx cap sync android"
   },
   "devDependencies": {
     "prettier": "^3.9.6",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2"
   }
 }
