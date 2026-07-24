@@ -49,9 +49,9 @@ Workflow: `.github/workflows/apk.yml`
 
 1. Push to `main` or run **Build Android APK**
 2. Download the `curio-clash-debug-apk` artifact (`app-debug.apk`)
-3. Locally: `npm run build:android` then open `android/` in Android Studio / `./gradlew assembleDebug`
+3. Locally: `npm run brand:android && npm run build:android` then open `android/` in Android Studio / `./gradlew assembleDebug`
 
-The APK wraps the same Vite web client with Capacitor (`com.fitsummehari.curioclash`).
+The APK wraps the same Vite web client with Capacitor (`com.fitsummehari.curioclash`), branded launcher icons, adaptive icon, and ink/brass splash.
 
 ## How a lot works
 
