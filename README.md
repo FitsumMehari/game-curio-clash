@@ -33,19 +33,25 @@ Ranked Duel, Grand Auction, Team Dealers, Ghost Market, Collection Run campaign,
 - Local / seeded simulation (no server required for MVP)
 - Ready path for Cloudflare Pages + Workers + Durable Objects later
 
-## Run
+## Deploy
 
-```bash
-cd curio-clash
-npm install
-npm run dev
-```
+### GitHub Pages
 
-Open the printed local URL (port **5174**).
+Workflow: `.github/workflows/pages.yml`
 
-```bash
-npm run check   # typecheck + tests + production build
-```
+1. Repo **Settings → Pages → Source: GitHub Actions**
+2. Push to `main` (or run **Deploy to GitHub Pages** manually)
+3. Site base path is `/game-curio-clash/`
+
+### Android APK
+
+Workflow: `.github/workflows/apk.yml`
+
+1. Push to `main` or run **Build Android APK**
+2. Download the `curio-clash-debug-apk` artifact (`app-debug.apk`)
+3. Locally: `npm run build:android` then open `android/` in Android Studio / `./gradlew assembleDebug`
+
+The APK wraps the same Vite web client with Capacitor (`com.fitsummehari.curioclash`).
 
 ## How a lot works
 
