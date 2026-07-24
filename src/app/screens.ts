@@ -103,10 +103,10 @@ export function matchScreen(state: MatchState, now: number): string {
       ${peeked.length ? `<ul class="peeked">${peeked.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : ""}
     </div>
     <div class="status-bar">
-      <span>₡${human.money}</span>
-      <span>Tokens ${human.tokens}</span>
-      <span>Rep ${human.reputation}</span>
-      <span>${focusLine(human)}</span>
+      <div class="stat"><span class="stat-label">Cash</span><span class="stat-value">₡${human.money}</span></div>
+      <div class="stat"><span class="stat-label">Tokens</span><span class="stat-value">${human.tokens}</span></div>
+      <div class="stat"><span class="stat-label">Rep</span><span class="stat-value">${human.reputation}</span></div>
+      <div class="stat"><span class="stat-label">Focus</span><span class="stat-value">${focusLine(human)}</span></div>
     </div>
     <section class="claims">
       <h3>Public claim</h3>
@@ -129,15 +129,17 @@ export function matchScreen(state: MatchState, now: number): string {
         <button type="button" class="btn chip" data-bid-set="350">₡350</button>
         <button type="button" class="btn chip" data-bid-frac="0.35">35% bank</button>
       </div>
-      <div class="bid-row">
-        <input id="bid-input" type="number" min="0" max="${human.money}" step="5" value="${myBid}" />
-        <button type="button" class="btn" data-act="lock-bid">Save bid</button>
-        <button type="button" class="btn primary" data-act="submit-lot" ${ready ? "" : "disabled"}>Submit lot</button>
-      </div>
       <div class="token-row">
         <button type="button" class="btn" data-act="inspect" ${human.tokens <= 0 ? "disabled" : ""}>Spend token — peek a rival clue</button>
       </div>
     </section>
+    <div class="sticky-actions">
+      <div class="bid-row">
+        <input id="bid-input" type="number" min="0" max="${human.money}" step="5" value="${myBid}" aria-label="Bid amount" />
+        <button type="button" class="btn" data-act="lock-bid">Save</button>
+        <button type="button" class="btn primary" data-act="submit-lot" ${ready ? "" : "disabled"}>Submit lot</button>
+      </div>
+    </div>
     <aside class="table-side">
       <h3>Dealers at the table</h3>
       <ul class="players">
@@ -146,7 +148,7 @@ export function matchScreen(state: MatchState, now: number): string {
             if (p.isHuman) {
               return `<li><strong>${escapeHtml(p.name)}</strong> (you) · ₡${p.money}${myClaim ? ` · “${CLAIM_LABELS[myClaim]}”` : ""}</li>`;
             }
-            return `<li><strong>${escapeHtml(p.name)}</strong> · ₡${p.money}<br/><span class="fine">${escapeHtml(describeDealer(p).split(" — ")[1] ?? "")}</span></li>`;
+            return `<li><strong>${escapeHtml(p.name)}</strong> · ₡${p.money}<span class="fine">${escapeHtml(describeDealer(p).split(" — ")[1] ?? "")}</span></li>`;
           })
           .join("")}
       </ul>
@@ -170,32 +172,38 @@ function revealScreen(state: MatchState): string {
     <p class="lede">${escapeHtml(r.artifact.blurb)}</p>
     <div class="reveal-grid">
       <div><span>Category</span><strong>${CATEGORY_LABELS[r.artifact.category]}</strong></div>
-      <div><span>Authenticity</span><strong>${r.genuine ? "Genuine" : "Forgery"}</strong></div>
+      <div class="${r.genuine ? "auth-good" : "auth-bad"}"><span>Authenticity</span><strong>${r.genuine ? "Genuine" : "Forgery"}</strong></div>
       <div><span>Realized value</span><strong>₡${r.realizedValue}</strong></div>
       <div><span>Set bonus</span><strong>₡${r.setBonus}</strong></div>
       <div><span>Winner</span><strong>${winner ? escapeHtml(winner.name) : "Passed in"}</strong></div>
       <div><span>Winning bid</span><strong>₡${r.winningBid}</strong></div>
     </div>
-    <h3>Bids</h3>
-    <ul class="bid-list">
-      ${[...r.bids]
-        .sort((a, b) => b.amount - a.amount)
-        .map((b) => {
-          const p = state.players.find((x) => x.id === b.playerId)!;
-          return `<li>${escapeHtml(p.name)} — ₡${b.amount}</li>`;
-        })
-        .join("")}
-    </ul>
-    <h3>Claims</h3>
-    <ul class="bid-list">
-      ${r.claims
-        .map((c) => {
-          const p = state.players.find((x) => x.id === c.playerId)!;
-          return `<li>${escapeHtml(p.name)} — “${CLAIM_LABELS[c.claim]}”</li>`;
-        })
-        .join("")}
-    </ul>
-    <button type="button" class="btn primary" data-act="next-lot">${state.lotIndex + 1 >= state.lots.length ? "Final standings" : "Next lot"}</button>
+    <section class="card">
+      <h3>Bids</h3>
+      <ul class="bid-list">
+        ${[...r.bids]
+          .sort((a, b) => b.amount - a.amount)
+          .map((b) => {
+            const p = state.players.find((x) => x.id === b.playerId)!;
+            return `<li><strong>${escapeHtml(p.name)}</strong> — ₡${b.amount}</li>`;
+          })
+          .join("")}
+      </ul>
+    </section>
+    <section class="card">
+      <h3>Claims</h3>
+      <ul class="bid-list">
+        ${r.claims
+          .map((c) => {
+            const p = state.players.find((x) => x.id === c.playerId)!;
+            return `<li><strong>${escapeHtml(p.name)}</strong> — “${CLAIM_LABELS[c.claim]}”</li>`;
+          })
+          .join("")}
+      </ul>
+    </section>
+    <div class="actions reveal-actions">
+      <button type="button" class="btn primary" data-act="next-lot">${state.lotIndex + 1 >= state.lots.length ? "Final standings" : "Next lot"}</button>
+    </div>
   `);
 }
 
