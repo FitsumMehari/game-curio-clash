@@ -46,7 +46,7 @@ export function homeScreen(nickname: string, roomFromUrl: string): string {
       <p class="fine">Solo is the main loop: eight sealed lots, secret bids, structured bluffs. Private rooms share a seed and fill empty seats with dealers.</p>
     </section>
     <section class="modes">
-      <article><h3>Solo Market</h3><p>Face ${PLAYBOOKS.length} unpredictable computer playstyles — aggression, bluffs, snipes, and late-game hoarding.</p></article>
+      <article><h3>Solo Market</h3><p>Dealers run an on-device Monte Carlo mind (clue beliefs → EV bids → bluffs). ${PLAYBOOKS.length} personalities, no cloud AI.</p></article>
       <article><h3>Daily Appraiser</h3><p>One global puzzle. Rank your deduction, not your reflexes.</p></article>
       <article><h3>Challenge link</h3><p>After a match, share a dramatic lot: would you have paid that bid?</p></article>
     </section>

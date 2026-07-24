@@ -19,7 +19,7 @@ Curio Clash leans on auction-game tension from titles like *For Sale* (scarce mo
 
 ### Modes shipping now
 
-1. **Solo vs Computer** — guest nickname, 1–5 AI dealers drawn from **200 playbooks** (aggression, bluffs, snipes, late-game hoarding, claim biases)
+1. **Solo vs Computer** — guest nickname, 1–5 AI dealers. Each draws a playbook personality, then decides with an **on-device Monte Carlo EV mind** (no API, no model download): beliefs from private clues → bid search → strategic bluffs.
 2. **Private Table** — shareable `?room=CODE` seed; empty seats filled with dealers
 3. **Daily Appraiser** — one UTC seed puzzle with shareable score
 
