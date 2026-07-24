@@ -28,6 +28,7 @@ export function boot(root: HTMLElement): void {
   let tickTimer: number | null = null;
   let daily = buildDailyPuzzle();
   let dailyResultHtml = "";
+  let resolving = false;
 
   const roomFromUrl = new URLSearchParams(location.search).get("room")?.toUpperCase() ?? "";
 
@@ -49,11 +50,25 @@ export function boot(root: HTMLElement): void {
     return nickname;
   };
 
+  const readBotCount = () => {
+    const el = root.querySelector<HTMLSelectElement>("#solo-bots");
+    return Math.max(1, Math.min(5, Number(el?.value || 3)));
+  };
+
   const startMatch = (opts: NewMatchOpts) => {
+    resolving = false;
     match = beginLot(createMatch(opts));
     mode = "match";
     startTicker();
     render();
+  };
+
+  const startSolo = () => {
+    const nick = readNick();
+    const bots = readBotCount();
+    const seed = `solo:${Date.now()}:${nick}:${bots}`;
+    startMatch({ seed, humanName: nick, botCount: bots, mode: "solo" });
+    history.replaceState({}, "", `?room=${roomCodeFromSeed(seed)}`);
   };
 
   const startTicker = () => {
@@ -62,10 +77,8 @@ export function boot(root: HTMLElement): void {
       if (!match || mode !== "match") return;
       if (match.phase === "claim_bid") {
         const now = Date.now();
-        if (now >= match.timerEndsAt || humanReady(match)) {
-          resolveCurrentLot();
-        } else {
-          // refresh timer only
+        if (now >= match.timerEndsAt) resolveCurrentLot();
+        else {
           const t = root.querySelector(".timer");
           if (t) t.textContent = `${Math.max(0, Math.ceil((match.timerEndsAt - now) / 1000))}s`;
         }
@@ -73,19 +86,27 @@ export function boot(root: HTMLElement): void {
     }, 250);
   };
 
+  const syncBidFromInput = () => {
+    if (!match) return;
+    const input = root.querySelector<HTMLInputElement>("#bid-input");
+    if (input) match = submitHumanBid(match, Number(input.value || 0));
+  };
+
   const resolveCurrentLot = () => {
-    if (!match || match.phase !== "claim_bid") return;
-    // auto-fill human if incomplete
+    if (!match || match.phase !== "claim_bid" || resolving) return;
+    resolving = true;
+    syncBidFromInput();
     if (!match.lots[match.lotIndex]!.claims.some((c) => c.playerId === match!.humanId)) {
       match = submitHumanClaim(match, "not_bidding");
     }
     if (!match.lots[match.lotIndex]!.bids.some((b) => b.playerId === match!.humanId)) {
       match = submitHumanBid(match, 0);
     }
-    const rng = createRng(`${match.seed}:lot:${match.lotIndex}:bots`);
+    const rng = createRng(`${match.seed}:lot:${match.lotIndex}:bots:${Date.now() % 997}`);
     const bots = allBotDecisions(match, rng);
     match = applyBotActions(match, bots);
     match = resolveLot(match);
+    resolving = false;
     render();
   };
 
@@ -100,28 +121,31 @@ export function boot(root: HTMLElement): void {
         } else if (act === "how") {
           mode = "how";
           render();
-        } else if (act === "bot-market") {
-          const nick = readNick();
-          const seed = `bot:${Date.now()}:${nick}`;
-          startMatch({ seed, humanName: nick, botCount: 3 });
-          history.replaceState({}, "", `?room=${roomCodeFromSeed(seed)}`);
+        } else if (act === "solo" || act === "bot-market" || act === "rematch") {
+          startSolo();
         } else if (act === "private" || act === "join-room") {
           const nick = readNick();
           const input = root.querySelector<HTMLInputElement>("#room-code");
           let code = (input?.value || roomFromUrl || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
           if (!code) code = roomCodeFromSeed(`priv:${Date.now()}`);
-          const seed = `room:${code}`;
-          startMatch({ seed, humanName: nick, botCount: 3 });
+          startMatch({ seed: `room:${code}`, humanName: nick, botCount: 3, mode: "private" });
           history.replaceState({}, "", `?room=${code}`);
         } else if (act === "daily") {
           daily = buildDailyPuzzle();
           mode = "daily";
           render();
         } else if (act === "lock-bid" && match) {
-          const input = root.querySelector<HTMLInputElement>("#bid-input");
-          match = submitHumanBid(match, Number(input?.value || 0));
-          if (humanReady(match)) resolveCurrentLot();
-          else render();
+          syncBidFromInput();
+          render();
+        } else if (act === "submit-lot" && match) {
+          syncBidFromInput();
+          if (!humanReady(match)) {
+            if (!match.lots[match.lotIndex]!.claims.some((c) => c.playerId === match!.humanId)) {
+              match = submitHumanClaim(match, "not_bidding");
+            }
+            syncBidFromInput();
+          }
+          resolveCurrentLot();
         } else if (act === "inspect" && match) {
           const rivals = match.players.filter((p) => p.id !== match!.humanId);
           const pick = rivals[Math.floor(Math.random() * rivals.length)];
@@ -129,13 +153,8 @@ export function boot(root: HTMLElement): void {
           render();
         } else if (act === "next-lot" && match) {
           match = advanceAfterReveal(match);
-          if (match.phase === "finished") {
-            /* stay on finished via matchScreen */
-          }
+          resolving = false;
           render();
-        } else if (act === "rematch") {
-          const nick = readNick();
-          startMatch({ seed: `bot:${Date.now()}:${nick}`, humanName: nick, botCount: 3 });
         } else if (act === "copy-challenge" && match) {
           const lot = [...match.lots].reverse().find((l) => l.reveal && l.reveal.winningBid > 0) ?? match.lots[0];
           const text = lot?.reveal
@@ -152,9 +171,28 @@ export function boot(root: HTMLElement): void {
     root.querySelectorAll<HTMLButtonElement>("[data-claim]").forEach((btn) => {
       btn.onclick = () => {
         if (!match) return;
-        const input = root.querySelector<HTMLInputElement>("#bid-input");
-        if (input) match = submitHumanBid(match, Number(input.value || 0));
+        syncBidFromInput();
         match = submitHumanClaim(match, btn.dataset.claim as ClaimId);
+        render();
+      };
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-bid-set]").forEach((btn) => {
+      btn.onclick = () => {
+        if (!match) return;
+        const human = match.players.find((p) => p.id === match!.humanId)!;
+        const raw = Number(btn.dataset.bidSet || 0);
+        match = submitHumanBid(match, Math.min(human.money, raw));
+        render();
+      };
+    });
+
+    root.querySelectorAll<HTMLButtonElement>("[data-bid-frac]").forEach((btn) => {
+      btn.onclick = () => {
+        if (!match) return;
+        const human = match.players.find((p) => p.id === match!.humanId)!;
+        const frac = Number(btn.dataset.bidFrac || 0);
+        match = submitHumanBid(match, Math.round((human.money * frac) / 5) * 5);
         render();
       };
     });
@@ -190,11 +228,6 @@ export function boot(root: HTMLElement): void {
     render();
   };
 
-  // Auto-join room from URL
-  if (roomFromUrl) {
-    // stay on home with code filled; user presses Join / or auto-start?
-  }
-
   render();
 }
 
@@ -202,9 +235,7 @@ function dailyForm(daily: ReturnType<typeof buildDailyPuzzle>): string {
   const opts = daily.objects
     .map((o, i) => `<option value="${i}">Lot ${i + 1}: ${escapeHtml(o.name)}</option>`)
     .join("");
-  const clueOpts = daily.clues
-    .map((_, i) => `<option value="${i}">Clue ${i + 1}</option>`)
-    .join("");
+  const clueOpts = daily.clues.map((_, i) => `<option value="${i}">Clue ${i + 1}</option>`).join("");
   return `
     <button type="button" class="linkish" data-act="home">← Lobby</button>
     <p class="eyebrow">Daily Appraiser · ${daily.key}</p>
