@@ -42,6 +42,10 @@ export interface PlayerState {
   name: string;
   isHuman: boolean;
   botId?: BotId;
+  /** Index into the 200 solo playbooks */
+  playbookId?: number;
+  /** Legacy alias used by older seeds */
+  styleSeed?: number;
   money: number;
   tokens: number;
   reputation: number;
@@ -93,6 +97,7 @@ export type MatchPhase =
 export interface MatchState {
   seed: string;
   roomCode: string;
+  mode: "solo" | "private";
   phase: MatchPhase;
   lotIndex: number;
   lots: AuctionLot[];
@@ -100,6 +105,7 @@ export interface MatchState {
   humanId: string;
   timerEndsAt: number;
   log: string[];
+  tipShown: boolean;
 }
 
 export interface DailyPuzzle {
@@ -123,6 +129,7 @@ export const START_TOKENS = 3;
 export const START_REP = 50;
 export const AUCTION_COUNT = 8;
 export const BID_SECONDS = 9;
+export const SOLO_BID_SECONDS = 14;
 export const CLAIM_LABELS: Record<ClaimId, string> = {
   extremely_valuable: "This is extremely valuable.",
   probably_fake: "I think it is fake.",
