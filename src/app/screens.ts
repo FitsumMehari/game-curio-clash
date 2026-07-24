@@ -1,15 +1,9 @@
 import type { ClaimId, MatchState, PlayerState } from "@/core/types";
-import { CATEGORY_LABELS, CLAIM_LABELS } from "@/core/types";
+import { CATEGORY_LABELS, CLAIM_LABELS, SOLO_BID_SECONDS } from "@/core/types";
 import { finalScore, visibleFocusCategories } from "@/core/scoring";
 import { artifactById } from "@/data/artifacts";
-
-export type Screen =
-  | "home"
-  | "match"
-  | "daily"
-  | "daily-result"
-  | "how"
-  | "finished";
+import { describeDealer } from "@/bots/ai";
+import { PLAYBOOKS } from "@/bots/playbooks";
 
 export function shell(html: string): string {
   return `<div class="shell">${html}</div>`;
@@ -18,16 +12,28 @@ export function shell(html: string): string {
 export function homeScreen(nickname: string, roomFromUrl: string): string {
   return shell(`
     <header class="hero">
-      <p class="eyebrow">Auction house · Bluff table</p>
+      <p class="eyebrow">Auction house · ${PLAYBOOKS.length} dealer minds</p>
       <h1>Curio Clash</h1>
       <p class="lede">Everyone sees a different clue. Everyone can lie. Only one player wins the lot.</p>
     </header>
     <section class="card play-card">
-      <label class="field">Dealer name
+      <label class="field">Your dealer name
         <input id="nickname" maxlength="18" value="${escapeAttr(nickname)}" placeholder="Guest" autocomplete="nickname" />
       </label>
+      <div class="solo-setup">
+        <label class="field">Solo opponents
+          <select id="solo-bots">
+            <option value="1">1 dealer</option>
+            <option value="2">2 dealers</option>
+            <option value="3" selected>3 dealers</option>
+            <option value="4">4 dealers</option>
+            <option value="5">5 dealers</option>
+          </select>
+        </label>
+        <p class="fine">Each match draws unique playbooks from a pool of ${PLAYBOOKS.length} random dealer styles.</p>
+      </div>
       <div class="actions">
-        <button type="button" class="btn primary" data-act="bot-market">Play as Guest — Bot Market</button>
+        <button type="button" class="btn primary" data-act="solo">Play Solo vs Computer</button>
         <button type="button" class="btn" data-act="private">Private Table</button>
         <button type="button" class="btn" data-act="daily">Daily Appraiser</button>
       </div>
@@ -37,12 +43,12 @@ export function homeScreen(nickname: string, roomFromUrl: string): string {
         </label>
         <button type="button" class="btn" data-act="join-room">Join</button>
       </div>
-      <p class="fine">Private tables use the room code as a shared seed. Empty seats fill with AI dealers until live multiplayer arrives.</p>
+      <p class="fine">Solo is the main loop: eight sealed lots, secret bids, structured bluffs. Private rooms share a seed and fill empty seats with dealers.</p>
     </section>
     <section class="modes">
-      <article><h3>Bot Market</h3><p>Eight rapid auctions against rule-based personalities.</p></article>
+      <article><h3>Solo Market</h3><p>Face ${PLAYBOOKS.length} unpredictable computer playstyles — aggression, bluffs, snipes, and late-game hoarding.</p></article>
       <article><h3>Daily Appraiser</h3><p>One global puzzle. Rank your deduction, not your reflexes.</p></article>
-      <article><h3>Challenge later</h3><p>Share a dramatic lot: would you have paid that bid?</p></article>
+      <article><h3>Challenge link</h3><p>After a match, share a dramatic lot: would you have paid that bid?</p></article>
     </section>
     <button type="button" class="linkish" data-act="how">How it works</button>
   `);
@@ -54,10 +60,11 @@ export function howScreen(): string {
     <h2>How Curio Clash works</h2>
     <ol class="rules">
       <li>Each lot is sealed. You get one private clue — truthful, incomplete.</li>
-      <li>In ~9 seconds: make a public claim (you may lie), bid in secret, optionally spend a token to peek.</li>
-      <li>Highest bid wins the artifact. Identity, authenticity, and value are revealed.</li>
+      <li>Make a public claim (you may lie), set a secret bid, optionally spend a token to peek.</li>
+      <li>Press <strong>Submit lot</strong> when ready, or wait for the timer (~${SOLO_BID_SECONDS}s solo).</li>
+      <li>Highest bid wins. Identity, authenticity, and value are revealed.</li>
       <li>Sets pay bonuses. Leftover money still scores. Winning every lot usually loses.</li>
-      <li>Reputation rises when claims prove right — spend that trust on a late bluff.</li>
+      <li>Computer dealers pick from ${PLAYBOOKS.length} playbooks so rematches feel different.</li>
     </ol>
   `);
 }
@@ -70,7 +77,8 @@ export function matchScreen(state: MatchState, now: number): string {
   const peeked = lot.inspected[state.humanId] ?? [];
   const secs = Math.max(0, Math.ceil((state.timerEndsAt - now) / 1000));
   const myClaim = lot.claims.find((c) => c.playerId === state.humanId)?.claim;
-  const myBid = lot.bids.find((b) => b.playerId === state.humanId)?.amount;
+  const myBid = lot.bids.find((b) => b.playerId === state.humanId)?.amount ?? 0;
+  const ready = !!myClaim && lot.bids.some((b) => b.playerId === state.humanId);
 
   if (state.phase === "reveal" && lot.reveal) {
     return revealScreen(state);
@@ -79,11 +87,16 @@ export function matchScreen(state: MatchState, now: number): string {
   return shell(`
     <div class="match-top">
       <div>
-        <p class="eyebrow">Room ${state.roomCode} · Lot ${state.lotIndex + 1}/${state.lots.length}</p>
+        <p class="eyebrow">${state.mode === "solo" ? "Solo" : "Table"} ${state.roomCode} · Lot ${state.lotIndex + 1}/${state.lots.length}</p>
         <h2>Unknown object — Lot #${state.lotIndex + 1}</h2>
       </div>
       <div class="timer" aria-live="polite">${secs}s</div>
     </div>
+    ${
+      !state.tipShown
+        ? `<p class="tip">Tip: claim something (even a lie), set a bid with the chips, then <strong>Submit lot</strong>. Tokens peek a rival clue.</p>`
+        : ""
+    }
     <div class="lot-stage">
       <div class="sealed" aria-hidden="true"></div>
       <p class="clue"><span>Your clue</span>${escapeHtml(clue.text)}</p>
@@ -108,21 +121,32 @@ export function matchScreen(state: MatchState, now: number): string {
     </section>
     <section class="bid-panel">
       <h3>Secret bid</h3>
+      <div class="bid-chips">
+        <button type="button" class="btn chip" data-bid-set="0">Pass</button>
+        <button type="button" class="btn chip" data-bid-set="50">₡50</button>
+        <button type="button" class="btn chip" data-bid-set="120">₡120</button>
+        <button type="button" class="btn chip" data-bid-set="220">₡220</button>
+        <button type="button" class="btn chip" data-bid-set="350">₡350</button>
+        <button type="button" class="btn chip" data-bid-frac="0.35">35% bank</button>
+      </div>
       <div class="bid-row">
-        <input id="bid-input" type="number" min="0" max="${human.money}" step="10" value="${myBid ?? 0}" />
-        <button type="button" class="btn primary" data-act="lock-bid">Lock bid</button>
+        <input id="bid-input" type="number" min="0" max="${human.money}" step="5" value="${myBid}" />
+        <button type="button" class="btn" data-act="lock-bid">Save bid</button>
+        <button type="button" class="btn primary" data-act="submit-lot" ${ready ? "" : "disabled"}>Submit lot</button>
       </div>
       <div class="token-row">
         <button type="button" class="btn" data-act="inspect" ${human.tokens <= 0 ? "disabled" : ""}>Spend token — peek a rival clue</button>
       </div>
     </section>
     <aside class="table-side">
-      <h3>Table</h3>
+      <h3>Dealers at the table</h3>
       <ul class="players">
         ${state.players
           .map((p) => {
-            const claimed = lot.claims.find((c) => c.playerId === p.id);
-            return `<li><strong>${escapeHtml(p.name)}</strong> · ₡${p.money} · ${claimed ? CLAIM_LABELS[claimed.claim] : "…"}</li>`;
+            if (p.isHuman) {
+              return `<li><strong>${escapeHtml(p.name)}</strong> (you) · ₡${p.money}${myClaim ? ` · “${CLAIM_LABELS[myClaim]}”` : ""}</li>`;
+            }
+            return `<li><strong>${escapeHtml(p.name)}</strong> · ₡${p.money}<br/><span class="fine">${escapeHtml(describeDealer(p).split(" — ")[1] ?? "")}</span></li>`;
           })
           .join("")}
       </ul>
@@ -178,17 +202,16 @@ function revealScreen(state: MatchState): string {
 export function finishedScreen(state: MatchState): string {
   const values = new Map<string, number>();
   for (const lot of state.lots) {
-    if (lot.reveal?.winnerId) {
-      values.set(lot.artifact.id, lot.reveal.realizedValue);
-    }
+    if (lot.reveal?.winnerId) values.set(lot.artifact.id, lot.reveal.realizedValue);
   }
   const ranked = [...state.players]
     .map((p) => ({ p, score: finalScore(p, values) }))
     .sort((a, b) => b.score - a.score);
+  const you = ranked.findIndex((r) => r.p.isHuman) + 1;
 
   return shell(`
     <p class="eyebrow">Grand total · Room ${state.roomCode}</p>
-    <h2>Museum closed</h2>
+    <h2>${you === 1 ? "You closed the museum" : `Finished #${you}`}</h2>
     <ol class="standings">
       ${ranked
         .map(
@@ -197,10 +220,13 @@ export function finishedScreen(state: MatchState): string {
         )
         .join("")}
     </ol>
-    <p class="fine">Score = collection value + leftover cash. Sets paid during the night.</p>
+    <p class="fine">Score = collection value + leftover cash. Dealers used playbooks ${state.players
+      .filter((p) => !p.isHuman)
+      .map((p) => `#${p.playbookId}`)
+      .join(", ")}.</p>
     <div class="actions">
-      <button type="button" class="btn primary" data-act="home">Back to lobby</button>
-      <button type="button" class="btn" data-act="rematch">Rematch (new seed)</button>
+      <button type="button" class="btn primary" data-act="solo">Solo rematch</button>
+      <button type="button" class="btn" data-act="home">Lobby</button>
       <button type="button" class="btn" data-act="copy-challenge">Copy challenge link</button>
     </div>
   `);
