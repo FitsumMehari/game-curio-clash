@@ -140,6 +140,40 @@ select {
   gap: 10px;
 }
 
+.bid-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.btn.chip {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.tip {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(212, 163, 92, 0.1);
+  color: var(--parchment);
+  font-size: 14px;
+  line-height: 1.4;
+  animation: rise 0.5s ease both;
+}
+
+.solo-setup {
+  display: grid;
+  gap: 8px;
+}
+
+.players .fine {
+  display: inline-block;
+  margin-top: 2px;
+}
+
 .btn {
   appearance: none;
   border: 1px solid var(--line);
