@@ -2,9 +2,11 @@ import { ARTIFACTS } from "@/data/artifacts";
 import { assignPrivateClues } from "@/core/clues";
 import { createRng, roomCodeFromSeed, shuffle } from "@/core/rng";
 import { realizedLotValue } from "@/core/scoring";
+import { dealerDisplayName, pickPlaybookIds, playbookById } from "@/bots/playbooks";
 import {
   AUCTION_COUNT,
   BID_SECONDS,
+  SOLO_BID_SECONDS,
   START_MONEY,
   START_REP,
   START_TOKENS,
@@ -20,6 +22,7 @@ export interface NewMatchOpts {
   seed: string;
   humanName: string;
   botCount?: number;
+  mode?: "solo" | "private";
   botIds?: PlayerState["botId"][];
 }
 
@@ -37,12 +40,15 @@ function makeHuman(name: string): PlayerState {
   };
 }
 
-function makeBot(id: string, name: string, botId: PlayerState["botId"]): PlayerState {
+function makeBotFromPlaybook(id: string, playbookId: number): PlayerState {
+  const book = playbookById(playbookId);
   return {
     id,
-    name,
+    name: dealerDisplayName(book),
     isHuman: false,
-    botId,
+    botId: book.archetype,
+    playbookId: book.id,
+    styleSeed: book.id,
     money: START_MONEY,
     tokens: START_TOKENS,
     reputation: START_REP,
@@ -52,19 +58,13 @@ function makeBot(id: string, name: string, botId: PlayerState["botId"]): PlayerS
   };
 }
 
-const DEFAULT_BOTS: { botId: NonNullable<PlayerState["botId"]>; name: string }[] = [
-  { botId: "collector", name: "The Collector" },
-  { botId: "shark", name: "The Shark" },
-  { botId: "skeptic", name: "The Skeptic" },
-  { botId: "accountant", name: "The Accountant" },
-  { botId: "bluffer", name: "The Bluffer" },
-];
-
 export function createMatch(opts: NewMatchOpts): MatchState {
   const rng = createRng(opts.seed);
   const human = makeHuman(opts.humanName);
+  const mode = opts.mode ?? "solo";
   const nBots = Math.max(1, Math.min(5, opts.botCount ?? 3));
-  const bots = DEFAULT_BOTS.slice(0, nBots).map((b, i) => makeBot(`bot-${i}`, b.name, opts.botIds?.[i] ?? b.botId));
+  const playbookIds = pickPlaybookIds(rng, nBots);
+  const bots = playbookIds.map((pid, i) => makeBotFromPlaybook(`bot-${i}`, pid));
   const players = [human, ...bots];
   const deck = shuffle(rng, ARTIFACTS).slice(0, AUCTION_COUNT);
   const lots: AuctionLot[] = deck.map((artifact, index) => {
@@ -80,26 +80,36 @@ export function createMatch(opts: NewMatchOpts): MatchState {
     };
   });
 
+  const dealerLine = bots.map((b) => playbookById(b.playbookId!).tagline).join(" · ");
+
   return {
     seed: opts.seed,
     roomCode: roomCodeFromSeed(opts.seed),
+    mode,
     phase: "briefing",
     lotIndex: 0,
     lots,
     players,
     humanId: human.id,
     timerEndsAt: 0,
-    log: [`Table ${roomCodeFromSeed(opts.seed)} opens. Eight lots. Spend carefully.`],
+    tipShown: false,
+    log: [
+      `Table ${roomCodeFromSeed(opts.seed)} opens (${mode}). Eight lots.`,
+      `Dealers tonight: ${bots.map((b) => b.name).join(", ")}.`,
+      dealerLine,
+    ],
   };
 }
 
 export function beginLot(state: MatchState, now = Date.now()): MatchState {
   const lot = state.lots[state.lotIndex];
   if (!lot) return { ...state, phase: "finished" };
+  const seconds = state.mode === "solo" ? SOLO_BID_SECONDS : BID_SECONDS;
   return {
     ...state,
     phase: "claim_bid",
-    timerEndsAt: now + BID_SECONDS * 1000,
+    timerEndsAt: now + seconds * 1000,
+    tipShown: state.tipShown || state.lotIndex > 0,
     log: [
       ...state.log,
       `Lot #${state.lotIndex + 1}: Unknown object sealed. Private clues dealt.`,
@@ -110,10 +120,9 @@ export function beginLot(state: MatchState, now = Date.now()): MatchState {
 export function submitHumanClaim(state: MatchState, claim: ClaimId): MatchState {
   if (state.phase !== "claim_bid") return state;
   const lot = state.lots[state.lotIndex]!;
-  if (lot.claims.some((c) => c.playerId === state.humanId)) return state;
-  const claims = [...lot.claims, { playerId: state.humanId, claim }];
+  const claims = [...lot.claims.filter((c) => c.playerId !== state.humanId), { playerId: state.humanId, claim }];
   const lots = state.lots.map((l, i) => (i === state.lotIndex ? { ...l, claims } : l));
-  return { ...state, lots };
+  return { ...state, lots, tipShown: true };
 }
 
 export function submitHumanBid(state: MatchState, amount: number): MatchState {
